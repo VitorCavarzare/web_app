@@ -152,6 +152,8 @@ def process_payment_data(df_ap005, df_cnpj):
             ),
             axis=1
         )
+
+        df_ap005['valor_valido'] = df_ap005['valor_valido'].fillna(False).astype(bool)
         
         # Zera valores que não atendem aos critérios
         df_ap005.loc[~df_ap005['valor_valido'], 'valor_constituido_contrato_unidade_recebivel'] = 0

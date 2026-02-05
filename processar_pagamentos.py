@@ -114,12 +114,7 @@ def process_payment_data(df_ap005, df_cnpj):
             "indicador_ordem_efeito", "valor_constituido_contrato_unidade_recebivel"
         ]
         
-        # --- AJUSTE DE SEGURANÇA AQUI ---
-        # Garante que o DataFrame tenha apenas as 15 colunas que definimos nomes.
-        # Se o arquivo vier com uma 16ª coluna (vazia ou extra), ela será descartada aqui.
         df_separado = df_separado.iloc[:, :len(novas_colunas)]
-        
-        # Agora a atribuição de nomes sempre terá o tamanho exato
         df_separado.columns = novas_colunas
         
         df_ap005 = pd.concat([

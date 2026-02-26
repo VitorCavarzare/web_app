@@ -97,8 +97,8 @@ def process_payment_data(df_ap005, df_cnpj):
             raise ValueError("Coluna 'VALOR' não encontrada no DataFrame CNPJ")
         
         # Processamento do AP005
-        df_ap005['usuario_final_recebedor'] = df_ap005['usuario_final_recebedor'].astype(str).str.replace('[^0-9]', '', regex=True)
-        df_cnpj['CNPJ'] = df_cnpj['CNPJ'].astype(str).str.replace('[^0-9]', '', regex=True)
+        df_ap005['usuario_final_recebedor'] = df_ap005['usuario_final_recebedor'].astype(str).str.replace('[^0-9]', '', regex=True).str.zfill(14)
+        df_cnpj['CNPJ'] = df_cnpj['CNPJ'].astype(str).str.replace('[^0-9]', '', regex=True).str.zfill(14)
         
         # Processamento da coluna informacoes_pagamento
         df_ap005['informacoes_pagamento'] = df_ap005['informacoes_pagamento'].str.split('|').str[0]
@@ -126,15 +126,15 @@ def process_payment_data(df_ap005, df_cnpj):
         df_ap005['is_debito'] = df_ap005['arranjo_pagamento'].str.endswith('D')
 
         # Verifica se a coluna existe antes de tentar acessá-la
-        if 'valor_constituido_contrato_unidade_recebivel' in df_ap005.columns:
-            df_ap005['valor_constituido_contrato_unidade_recebivel'] = df_ap005['valor_constituido_contrato_unidade_recebivel'].replace('', '0').fillna('0')
+        if 'valor_liquidacao_efetiva' in df_ap005.columns:
+            df_ap005['valor_liquidacao_efetiva'] = df_ap005['valor_liquidacao_efetiva'].replace('', '0').fillna('0')
         else:
             # Se a coluna não existir, cria uma com valores padrão (0)
-            df_ap005['valor_constituido_contrato_unidade_recebivel'] = 0
+            df_ap005['valor_liquidacao_efetiva'] = 0
 
         # Conversões e limpeza de dados
-        df_ap005['valor_constituido_contrato_unidade_recebivel'] = pd.to_numeric(
-            df_ap005['valor_constituido_contrato_unidade_recebivel'].replace('', '0').fillna('0'),
+        df_ap005['valor_liquidacao_efetiva'] = pd.to_numeric(
+            df_ap005['valor_liquidacao_efetiva'].replace('', '0').fillna('0'),
             errors='coerce'
         )
         
@@ -156,13 +156,13 @@ def process_payment_data(df_ap005, df_cnpj):
         df_ap005['valor_valido'] = df_ap005['valor_valido'].fillna(False).astype(bool)
         
         # Zera valores que não atendem aos critérios
-        df_ap005.loc[~df_ap005['valor_valido'], 'valor_constituido_contrato_unidade_recebivel'] = 0
+        df_ap005.loc[~df_ap005['valor_valido'], 'valor_liquidacao_efetiva'] = 0
         
         df_ap005 = df_ap005[df_ap005['numero_documento_titular'] == '13998916000124']
         
         # Agrupa por usuário final recebedor
         df_grouped = df_ap005.groupby('usuario_final_recebedor').agg({
-            'valor_constituido_contrato_unidade_recebivel': 'sum',
+            'valor_liquidacao_efetiva': 'sum',
             'data_liquidacao': 'max'  # Pega a data mais recente
         }).reset_index()
         
@@ -177,11 +177,11 @@ def process_payment_data(df_ap005, df_cnpj):
         
         # Nova lógica para determinar status de pagamento
         def determine_status(row):
-            if pd.isna(row['data_liquidacao']) or float(row['valor_constituido_contrato_unidade_recebivel']) == 0:
+            if pd.isna(row['data_liquidacao']) or float(row['valor_liquidacao_efetiva']) == 0:
                 return 'NÃO PAGO'
             
             valor_mensalidade = float(row['VALOR'])
-            valor_pago = float(row['valor_constituido_contrato_unidade_recebivel'])
+            valor_pago = float(row['valor_liquidacao_efetiva'])
             
             percentual_pago = (valor_pago / valor_mensalidade * 100) if valor_mensalidade > 0 else 0
             
@@ -199,11 +199,11 @@ def process_payment_data(df_ap005, df_cnpj):
             ),
             'VALOR_MENSALIDADE': result['VALOR'],
             'DATA_LIQUIDACAO': result.apply(
-                lambda x: x['data_liquidacao'] if pd.notnull(x['data_liquidacao']) and float(x['valor_constituido_contrato_unidade_recebivel']) > 0 else None,
+                lambda x: x['data_liquidacao'] if pd.notnull(x['data_liquidacao']) and float(x['valor_liquidacao_efetiva']) > 0 else None,
                 axis=1
             ),
             'VALOR_COBRADO': result.apply(
-                lambda x: x['valor_constituido_contrato_unidade_recebivel'] if pd.notnull(x['data_liquidacao']) else 0,
+                lambda x: x['valor_liquidacao_efetiva'] if pd.notnull(x['data_liquidacao']) else 0,
                 axis=1
             ),
             'STATUS_PAGAMENTO': result.apply(determine_status, axis=1)

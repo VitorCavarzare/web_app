@@ -11,3 +11,4 @@ google-auth
 pyarrow
 Pillow
 requests
+xlrd>=2.0.1

@@ -768,14 +768,14 @@ def exibir_resumo_pagamentos(resultado_final):
 def menu_extratos_bancarios():
     st.markdown('<div class="title">Processamento de Extratos Bancários</div>', unsafe_allow_html=True)
     st.markdown('<div class="centered">', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Arquivos de Entrada</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Arquivo de Entrada</div>', unsafe_allow_html=True)
 
     # Permite upload de um ou mais arquivos
     uploaded_files = st.file_uploader("Selecione o extrato bancário (Excel)", 
                                       type=['xls', 'xlsx'], 
                                       accept_multiple_files=True) # Ajustar para caso precise processar mais de um arquivo
 
-    if st.button("Processar Arquivos"):
+    if st.button("Processar Arquivo"):
         if not uploaded_files:
             st.error("Por favor, faça upload de apenas um extrato bancário.")
         else:

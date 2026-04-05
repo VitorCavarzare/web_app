@@ -21,6 +21,7 @@ from processar_arquivos_ap007b import *
 from processar_cnpj_cobranca import *
 from processar_pagamentos import * 
 from processar_um_arquivo_ap007a import *
+from processar_extratos_bancarios import *
 
 
 # Configurar o locale para formato brasileiro
@@ -104,6 +105,8 @@ def home():
         st.session_state.page = "menu_relatorio_marketup"
     # if st.button("Relatório Financeiro"):
     #     st.session_state.page = "menu_relatorio_financeiro"
+    if st.button("Extratos Bancários"):
+        st.session_state.page = "menu_extratos_bancarios"
     st.markdown('</div>', unsafe_allow_html=True)
     
 def menu_tipo_relatorio():
@@ -761,6 +764,61 @@ def exibir_resumo_pagamentos(resultado_final):
         st.metric("Valor Total Cobrado", 
                  f"R$ {locale.format_string('%.2f', total_cobrado, grouping=True)}")
 
+
+def menu_extratos_bancarios():
+    st.markdown('<div class="title">Processamento de Extratos Bancários</div>', unsafe_allow_html=True)
+    st.markdown('<div class="centered">', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Arquivos de Entrada</div>', unsafe_allow_html=True)
+
+    # Permite upload de um ou mais arquivos
+    uploaded_files = st.file_uploader("Selecione o extrato bancário (Excel)", 
+                                      type=['xls', 'xlsx'], 
+                                      accept_multiple_files=True) # Ajustar para caso precise processar mais de um arquivo
+
+    if st.button("Processar Arquivos"):
+        if not uploaded_files:
+            st.error("Por favor, faça upload de apenas um extrato bancário.")
+        else:
+            try:
+                # Chama a função lá do seu script
+                df_resultado = processar_extratos(uploaded_files) # Se for processar apenas 1 arquivo por vez, colocar o upload_files entre colchetes
+                total_geral = df_resultado['Credito'].sum()
+
+                st.success("Extrato processado com sucesso!")
+
+                # Exibindo os resultados na tela
+                st.markdown('<div class="subtitle">Resumo por Instituição</div>', unsafe_allow_html=True)
+                # 1. Atualiza o Total usando a sua função format_currency
+                st.metric("Valor Total Processado", f"R$ {format_currency(total_geral)}")
+
+                # 2. Atualiza a tabela aplicando a sua função em cada linha da coluna 'Credito'
+                st.dataframe(
+                    df_resultado.style.format({
+                        'Credito': lambda x: f"R$ {format_currency(x)}"
+                    }), 
+                    use_container_width=True)
+
+                # Criando o buffer para o download do Excel gerado
+                import io
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df_resultado.to_excel(writer, index=False, sheet_name='Resumo_Extratos')
+                buffer.seek(0)
+
+                st.download_button(
+                    label="Baixar Resultado em Excel",
+                    data=buffer,
+                    file_name=f"resumo_extratos_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao processar os arquivos: {e}")
+
+    if st.button("Voltar"):
+        st.session_state.page = "home"
+
+
 def menu_relatorio_financeiro():
     st.markdown('<div class="title">Relatório Financeiro</div>', unsafe_allow_html=True)
     st.write("Conteúdo do Relatório Financeiro.")
@@ -788,3 +846,5 @@ elif st.session_state.page == "menu_relatorio_marketup":
     menu_relatorio_marketup()
 elif st.session_state.page == "menu_relatorio_financeiro":
     menu_relatorio_financeiro()
+elif st.session_state.page == "menu_extratos_bancarios":
+    menu_extratos_bancarios()

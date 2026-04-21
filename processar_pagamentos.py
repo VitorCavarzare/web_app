@@ -84,7 +84,8 @@ def standardize_cnpj_columns(df_cnpj):
 
 def process_payment_data(df_ap005, df_cnpj):
     """
-    Processa dados de pagamento com correção no processamento dos valores
+    Processa dados de pagamento com correção no processamento dos valores,
+    capturando múltiplas transações na mesma célula e limpando espaços.
     """
     try:
         # Padroniza as colunas do DataFrame CNPJ e agrupa valores
@@ -96,14 +97,23 @@ def process_payment_data(df_ap005, df_cnpj):
         else:
             raise ValueError("Coluna 'VALOR' não encontrada no DataFrame CNPJ")
         
-        # Processamento do AP005
-        df_ap005['usuario_final_recebedor'] = df_ap005['usuario_final_recebedor'].astype(str).str.replace('[^0-9]', '', regex=True).str.zfill(14)
-        df_cnpj['CNPJ'] = df_cnpj['CNPJ'].astype(str).str.replace('[^0-9]', '', regex=True).str.zfill(14)
+        # --- CORREÇÃO CRÍTICA DO CNPJ ---
+        # Remove o ".0" no final (caso o Excel tenha lido como decimal) ANTES de limpar tudo
+        df_cnpj['CNPJ'] = df_cnpj['CNPJ'].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'[^0-9]', '', regex=True).str.zfill(14)
+        df_ap005['usuario_final_recebedor'] = df_ap005['usuario_final_recebedor'].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'[^0-9]', '', regex=True).str.zfill(14)
         
-        # Processamento da coluna informacoes_pagamento
-        df_ap005['informacoes_pagamento'] = df_ap005['informacoes_pagamento'].str.split('|').str[0]
+        # --- EXPLODE PARA MÚLTIPLOS PAGAMENTOS ---
+        # Separa a string pela barra vertical '|' e cria uma lista em cada célula
+        df_ap005['informacoes_pagamento'] = df_ap005['informacoes_pagamento'].astype(str).str.split('|')
         
-        # Separa as informações de pagamento
+        # Explode a lista para que cada pagamento vire uma linha independente no DataFrame
+        df_ap005 = df_ap005.explode('informacoes_pagamento')
+        
+        # Remove linhas vazias (caso a string terminasse com '|')
+        df_ap005 = df_ap005[df_ap005['informacoes_pagamento'].str.strip() != '']
+        
+        # --- SEPARAÇÃO DAS COLUNAS ---
+        # Separa as informações de pagamento usando o ponto e vírgula
         df_separado = df_ap005['informacoes_pagamento'].str.split(';', expand=True)
         
         novas_colunas = [
@@ -117,26 +127,30 @@ def process_payment_data(df_ap005, df_cnpj):
         df_separado = df_separado.iloc[:, :len(novas_colunas)]
         df_separado.columns = novas_colunas
         
+        # --- LIMPEZA DE ESPAÇOS INVISÍVEIS ---
+        # Garante que não haja espaços invisíveis atrapalhando os números ou datas
+        for col in df_separado.columns:
+            df_separado[col] = df_separado[col].astype(str).str.strip()
+        
         df_ap005 = pd.concat([
             df_ap005.drop('informacoes_pagamento', axis=1),
             df_separado
         ], axis=1)
         
         # Verifica pagamentos via débito (códigos terminados em 'D')
-        df_ap005['is_debito'] = df_ap005['arranjo_pagamento'].str.endswith('D')
+        df_ap005['is_debito'] = df_ap005['arranjo_pagamento'].astype(str).str.strip().str.endswith('D')
 
-        # Verifica se a coluna existe antes de tentar acessá-la
+        # Verifica se a coluna existe antes de tentar acessá-la e trata nulos
         if 'valor_liquidacao_efetiva' in df_ap005.columns:
-            df_ap005['valor_liquidacao_efetiva'] = df_ap005['valor_liquidacao_efetiva'].replace('', '0').fillna('0')
+            df_ap005['valor_liquidacao_efetiva'] = df_ap005['valor_liquidacao_efetiva'].astype(str).str.replace(',', '.').replace('', '0').replace('nan', '0').replace('None', '0').fillna('0')
         else:
-            # Se a coluna não existir, cria uma com valores padrão (0)
             df_ap005['valor_liquidacao_efetiva'] = 0
 
         # Conversões e limpeza de dados
         df_ap005['valor_liquidacao_efetiva'] = pd.to_numeric(
-            df_ap005['valor_liquidacao_efetiva'].replace('', '0').fillna('0'),
+            df_ap005['valor_liquidacao_efetiva'],
             errors='coerce'
-        )
+        ).fillna(0)
         
         # Converte data_liquidacao_efetiva para datetime
         df_ap005['data_liquidacao'] = pd.to_datetime(
@@ -158,6 +172,9 @@ def process_payment_data(df_ap005, df_cnpj):
         # Zera valores que não atendem aos critérios
         df_ap005.loc[~df_ap005['valor_valido'], 'valor_liquidacao_efetiva'] = 0
         
+        # --- FILTRO DO TITULAR BLINDADO ---
+        # Removemos qualquer caractere estranho e garantimos que o match com o CNPJ titular ocorra 100%
+        df_ap005['numero_documento_titular'] = df_ap005['numero_documento_titular'].astype(str).str.replace(r'[^0-9]', '', regex=True)
         df_ap005 = df_ap005[df_ap005['numero_documento_titular'] == '13998916000124']
         
         # Agrupa por usuário final recebedor
@@ -165,6 +182,19 @@ def process_payment_data(df_ap005, df_cnpj):
             'valor_liquidacao_efetiva': 'sum',
             'data_liquidacao': 'max'  # Pega a data mais recente
         }).reset_index()
+        
+        # --- RAIO-X PARA DEBUG ---
+        cnpjs_ap005 = set(df_grouped['usuario_final_recebedor'].unique())
+        cnpjs_marketup = set(df_cnpj['CNPJ'].unique())
+        cnpjs_em_comum = cnpjs_ap005.intersection(cnpjs_marketup)
+        
+        print("\n" + "="*40)
+        print(f"TOTAL DE CNPJs DISTINTOS NO AP005: {len(cnpjs_ap005)}")
+        print(f"TOTAL DE CNPJs DISTINTOS NO MARKETUP: {len(cnpjs_marketup)}")
+        print(f"CNPJs QUE EXISTEM EM AMBOS (MATCH): {len(cnpjs_em_comum)}")
+        if len(cnpjs_em_comum) > 0:
+            print(f"Exemplos de CNPJs em comum: {list(cnpjs_em_comum)[:3]}")
+        print("="*40 + "\n")
         
         # Merge com dados de CNPJ
         result = pd.merge(
@@ -193,7 +223,7 @@ def process_payment_data(df_ap005, df_cnpj):
             'CNPJ': result['CNPJ'],
             'RAZAO_SOCIAL': result['RAZAO_SOCIAL'],
             'NOME_FANTASIA': result.apply(
-                lambda x: x['RAZAO_SOCIAL'] if pd.isna(x['NOME_FANTASIA']) or x['NOME_FANTASIA'].strip() == '' 
+                lambda x: x['RAZAO_SOCIAL'] if pd.isna(x['NOME_FANTASIA']) or str(x['NOME_FANTASIA']).strip() == '' 
                 else x['NOME_FANTASIA'], 
                 axis=1
             ),
@@ -209,12 +239,7 @@ def process_payment_data(df_ap005, df_cnpj):
             'STATUS_PAGAMENTO': result.apply(determine_status, axis=1)
         })
         
-        # # Formata valores monetários
-        # for col in ['VALOR_MENSALIDADE', 'VALOR_COBRADO']:
-        #     final_result[col] = final_result[col].apply(
-        #         lambda x: locale.currency(x, grouping=True, symbol=None) if pd.notnull(x) else '0,00'
-        #     )
-        
+        # Formata valores monetários usando a função format_currency
         for col in ['VALOR_MENSALIDADE', 'VALOR_COBRADO']:
             final_result[col] = final_result[col].apply(format_currency)
         

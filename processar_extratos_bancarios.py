@@ -35,6 +35,8 @@ def processar_extratos(arquivos_upload):
         "TRIANGULO": "BANCO TRIANGULO S/A",
         "ENTREPAY": "ENTREPAY INSTITUICAO DE PAGAMENTO S.A",
         "CLOUDWALK": "CLOUDWALK INSTITUICAO DE PAGAMENTO E SERVICOS LTDA",
+        # Adicionado CLOUD WALK com espaço:
+        "CLOUD WALK": "CLOUDWALK INSTITUICAO DE PAGAMENTO E SERVICOS LTDA",
         "INFINITEPAY": "CLOUDWALK INSTITUICAO DE PAGAMENTO E SERVICOS LTDA",
         "ADIQ": "ADIQPLUS INSTITUICAO DE PAGAMENTO LTDA",
         "ZOOP": "ZOOP TECNOLOGIA & INSTITUICAO DE PAGAMENTO S.A.",
@@ -59,8 +61,11 @@ def processar_extratos(arquivos_upload):
         "SAFRA": "BANCO SAFRA S A",
         "BANRISUL": "BANRISUL SOLUCOES EM PAGAMENTOS S.A. - INSTITUICAO DE PAGAMENTO",
         "VERO ": "BANRISUL SOLUCOES EM PAGAMENTOS S.A. - INSTITUICAO DE PAGAMENTO",
-        # ---> LINHA ADICIONADA AQUI <---
-        "TED-TRANSF ELET DISPON REMET": "TED-TRANSF ELET DISPON REMET."
+        "TED-TRANSF ELET DISPON REMET": "TED-TRANSF ELET DISPON REMET.",
+        # Adicionada NATURA:
+        "NATURA": "NATURA CO PAY",
+        # Adicionado Lançamento Genérico do Bradesco no final do dicionário (Mapeado para Cielo):
+        "VENDA CARTAO DE CREDITO": "VENDA CARTAO DE CREDITO"
     }
 
     def identificar_instituicao(texto):
@@ -72,7 +77,8 @@ def processar_extratos(arquivos_upload):
             return "IFOOD.COM AGENCIA DE RESTAURANTES ONLINE S.A."
         if "99 FOOD" in texto_upper or "99FOOD" in texto_upper:
             return "99 FOOD LTDA"
-        if "PAGAR.ME" in texto_upper or "PAGARME" in texto_upper:
+        # Adicionado "PAGAR ME" com espaço:
+        if "PAGAR.ME" in texto_upper or "PAGARME" in texto_upper or "PAGAR ME" in texto_upper:
             return "PAGAR.ME INSTITUICAO DE PAGAMENTO S.A"
 
         # Varre o dicionário
